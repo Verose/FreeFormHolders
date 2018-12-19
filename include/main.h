@@ -8,4 +8,8 @@
 #include <iostream>
 
 
+void hello_mesh();
+
+void draw_mesh();
+
 #endif //FREEFROMHOLDERS_BLA_H

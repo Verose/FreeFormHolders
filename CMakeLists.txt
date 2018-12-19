@@ -2,18 +2,38 @@ cmake_minimum_required (VERSION 3.0)
 
 project(FreeFormHolders)
 
-find_package(Boost COMPONENTS date_time filesystem system)
+set (CMAKE_CXX_STANDARD 14)
+
+#set(Boost_DEBUG ON)
+set(BOOST_ROOT "/usr/include/boost/")
+set(BOOST_INCLUDEDIR "/usr/include")
+set(BOOST_LIBRARYDIR "/usr/lib/x86_64-linux-gnu/")
+
+find_package(Boost REQUIRED COMPONENTS
+        date_time
+        filesystem
+        )
+
 
 if(Boost_FOUND)
-    include_directories(${Boost_INCLUDE_DIRS})
+    include_directories(include ${Boost_INCLUDE_DIRS})
 endif()
 
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+# libigl
+option(LIBIGL_WITH_OPENGL "Use OpenGL" ON)
+option(LIBIGL_WITH_OPENGL_GLFW "Use GLFW" ON)
+
+find_package(LIBIGL REQUIRED QUIET)
+include_directories(include ../libigl/include)
+
 set(SOURCES
         ../src/main.cpp
-        ../src/geodesic_distance/geodesic_matlab_api.cpp
-        ../src/geodesic_distance/example0.cpp
-        ../src/geodesic_distance/example1.cpp
+#        ../src/geodesic_distance/geodesic_matlab_api.cpp
+#        ../src/geodesic_distance/example0.cpp
+#        ../src/geodesic_distance/example1.cpp
         )
 set(HEADERS
         ../include/main.h
@@ -33,4 +53,4 @@ set(HEADERS
 
 add_executable(FreeFormHolders ${SOURCES} ${HEADERS})
 
-target_link_libraries(FreeFormHolders ${Boost_LIBRARIES})
+target_link_libraries(FreeFormHolders ${Boost_LIBRARIES} igl::core igl::opengl_glfw)
