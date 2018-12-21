@@ -30,25 +30,26 @@ find_package(LIBIGL REQUIRED QUIET)
 include_directories(include ../libigl/include)
 
 set(SOURCES
-        ../src/main.cpp
-#        ../src/geodesic_distance/geodesic_matlab_api.cpp
+        src/main.cpp
+        #        ../src/geodesic_distance/geodesic_matlab_api.cpp
 #        ../src/geodesic_distance/example0.cpp
 #        ../src/geodesic_distance/example1.cpp
         )
 set(HEADERS
-        ../include/main.h
-        ../include/geodesic_distance/geodesic_algorithm_base.h
-        ../include/geodesic_distance/geodesic_algorithm_dijkstra.h
-        ../include/geodesic_distance/geodesic_algorithm_dijkstra_alternative.h
-        ../include/geodesic_distance/geodesic_algorithm_exact.h
-        ../include/geodesic_distance/geodesic_algorithm_exact_elements.h
-        ../include/geodesic_distance/geodesic_algorithm_graph_base.h
-        ../include/geodesic_distance/geodesic_algorithm_subdivision.h
-        ../include/geodesic_distance/geodesic_constants_and_simple_functions.h
-        ../include/geodesic_distance/geodesic_matlab_api.h
-        ../include/geodesic_distance/geodesic_memory.h
-        ../include/geodesic_distance/geodesic_mesh.h
-        ../include/geodesic_distance/geodesic_mesh_elements.h
+        include/main.h
+        include/geodesic_distance/geodesic_algorithm_base.h
+        include/geodesic_distance/geodesic_algorithm_dijkstra.h
+        include/geodesic_distance/geodesic_algorithm_dijkstra_alternative.h
+        include/geodesic_distance/geodesic_algorithm_exact.h
+        include/geodesic_distance/geodesic_algorithm_exact_elements.h
+        include/geodesic_distance/geodesic_algorithm_graph_base.h
+        include/geodesic_distance/geodesic_algorithm_subdivision.h
+        include/geodesic_distance/geodesic_constants_and_simple_functions.h
+        include/geodesic_distance/geodesic_matlab_api.h
+        include/geodesic_distance/geodesic_memory.h
+        include/geodesic_distance/geodesic_mesh.h
+        include/geodesic_distance/geodesic_mesh_elements.h
+        include/model_path.h
         )
 
 add_executable(FreeFormHolders ${SOURCES} ${HEADERS})

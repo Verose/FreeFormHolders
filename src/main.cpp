@@ -5,19 +5,50 @@
 #include "../include/main.h"
 #include <igl/opengl/glfw/Viewer.h>
 #include <igl/cotmatrix.h>
+#include <igl/random_points_on_mesh.h>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+#include <igl/readOBJ.h>
+#include <igl/writeOBJ.h>
 #include <iostream>
+
+#include "model_path.h"
 
 
 using namespace std;
 
 
 int main(int argc, char *argv[]) {
-    cout << "Hello World\n";
+    Eigen::MatrixXd V;
+    Eigen::MatrixXi F;
 
-    hello_mesh();
-    draw_mesh();
+    // Load a mesh
+    igl::readOBJ(MODEL_PATH "/bunny.obj", V, F);
+
+    // Print the vertices and faces matrices
+    std::cout << "Vertices: " << std::endl << V << std::endl;
+    std::cout << "Faces:    " << std::endl << F << std::endl;
+
+    // sample 1 random point on mesh
+    // given by barycentric coordinates of the sampled point in face FI
+    Eigen::VectorXi FI;
+    Eigen::SparseMatrix<double> B;
+    igl::random_points_on_mesh(1, V, F, B, FI);
+
+    // convert barycenter coordinates to original sampled point
+    Eigen::MatrixXd V_sample = B * V;
+
+    // Plot the mesh
+    igl::opengl::glfw::Viewer viewer;
+    viewer.data().set_mesh(V, F);  // copies the mesh into the viewer
+
+    viewer.data().add_points(V_sample, Eigen::RowVector3d(1, 0, 0));  // print sampled point
+
+    viewer.launch();  // creates a window, an OpenGL context and it starts the draw loop
+
+    // Save the mesh
+//    igl::writeOBJ(MODEL_PATH "/bunny_new.obj", V, F);
+
 
     return 0;
 }
