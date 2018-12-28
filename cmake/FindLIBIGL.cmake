@@ -7,9 +7,6 @@ if(LIBIGL_FOUND)
     return()
 endif()
 
-message("${CMAKE_SOURCE_DIR}/")
-
-
 find_path(LIBIGL_INCLUDE_DIR igl/readOBJ.h
         HINTS
         ENV LIBIGL
@@ -34,8 +31,6 @@ find_package_handle_standard_args(LIBIGL
         "\nlibigl not found --- You can download it using:\n\tgit clone --recursive https://github.com/libigl/libigl.git ${CMAKE_SOURCE_DIR}/../libigl"
         LIBIGL_INCLUDE_DIR)
 mark_as_advanced(LIBIGL_INCLUDE_DIR)
-
-message("${LIBIGL_INCLUDE_DIR}/")
 
 list(APPEND CMAKE_MODULE_PATH "${LIBIGL_INCLUDE_DIR}/../cmake")
 include(libigl)

@@ -3,23 +3,6 @@ cmake_minimum_required (VERSION 3.0)
 project(FreeFormHolders)
 
 set (CMAKE_CXX_STANDARD 14)
-
-#set(Boost_DEBUG ON)
-set(BOOST_ROOT "/usr/include/boost/")
-set(BOOST_INCLUDEDIR "/usr/include")
-set(BOOST_LIBRARYDIR "/usr/lib/x86_64-linux-gnu/")
-
-find_package(Boost REQUIRED COMPONENTS
-        date_time
-        filesystem
-        )
-
-
-if(Boost_FOUND)
-    include_directories(include ${Boost_INCLUDE_DIRS})
-endif()
-
-
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # libigl
@@ -39,4 +22,4 @@ set(HEADERS
 
 add_executable(FreeFormHolders ${SOURCES} ${HEADERS})
 
-target_link_libraries(FreeFormHolders ${Boost_LIBRARIES} igl::core igl::opengl igl::opengl_glfw)
+target_link_libraries(FreeFormHolders igl::core igl::opengl igl::opengl_glfw)
