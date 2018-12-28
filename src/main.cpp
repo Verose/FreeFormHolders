@@ -6,9 +6,6 @@
 #include <igl/HalfEdgeIterator.h>
 #include <igl/cut_mesh.h>
 
-#include <array>
-#include <set>
-
 #include "main.h"
 #include "model_path.h"
 
@@ -18,7 +15,7 @@
 
 
 int main(int argc, char *argv[]) {
-    bool init = false;
+//    bool init = false;
     Eigen::MatrixXd V;
     Eigen::MatrixXi F;
     Eigen::VectorXd d;
@@ -40,13 +37,25 @@ int main(int argc, char *argv[]) {
         // const double strip_size = 0.05;
         // The function should be 1 on each integer coordinate
         d = (d * 1000).array().eval();
-        calc_grip(V, F, d);
+
+        viewer.data().clear();
+        std::vector<Eigen::Vector2i> cuts;
+        calc_grip(V, F, d, cuts);
+
+        for (int i = 0; i < cuts.size(); i++) {
+            double point_index_start = cuts[i][0];
+            double point_index_end = cuts[i][1];
+            Eigen::RowVector3d point_start(V(point_index_start, 0), V(point_index_start, 1), V(point_index_start, 2));
+            Eigen::RowVector3d point_end(V(point_index_end, 0), V(point_index_end, 1), V(point_index_end, 2));
+            viewer.data().add_points(point_start, Eigen::RowVector3d(1, 0, 0));  // show the first point of each edge
+            viewer.data().add_edges(point_start, point_end, Eigen::RowVector3d(1, 0, 0));  // print edge (it's printed but not visible)
+        }
 
         // Compute per-vertex colors
         Eigen::MatrixXd C;
         igl::colormap(igl::COLOR_MAP_TYPE_INFERNO, d, true, C);
-        // Plot the mesh
 
+        // Plot the mesh
         viewer.data().set_mesh(V, F);
         viewer.data().set_colors(C);
     };
@@ -72,7 +81,7 @@ int main(int argc, char *argv[]) {
 //                    if (init) { // Only once
 //                        return true;
 //                    }
-                    init = true;
+//                    init = true;
                     int max;
                     bc.maxCoeff(&max);
                     int vid = F(fid, max);
@@ -121,7 +130,8 @@ void sample_random_point(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, igl
 }
 
 
-void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d) {
+void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d,
+               std::vector<Eigen::Vector2i> &cuts) {
     std::cout << "Calc Grip" << std::endl;
 
     double max_distance = d.maxCoeff();
@@ -141,44 +151,49 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
 
     int num_faces = F.rows();
     Eigen::MatrixXi cut_mask(num_faces, 3);
-    std::vector<std::array<int, 2>> cuts;
 
     std::set<int> visited_faces_ids;
     int current_face_id = 0;
     int e1_id = 0;
     int e2_id = 0;
 
-
     // Find first face:
     for (int i = 0; i < num_faces; i++) {
         current_face_id = i;
-        std::array<int, 3> fv{F(i, 0), F(i, 1), F(i, 2)};
-        std::array<double, 3> vd{d[fv[0]], d[fv[1]], d[fv[2]]};
-        std::array<int, 2> e0{F(i, 0), F(i, 1)};
-        std::array<int, 2> e1{F(i, 1), F(i, 2)};
-        std::array<int, 2> e2{F(i, 2), F(i, 0)};
+        Eigen::Vector3i fv{F(i, 0), F(i, 1), F(i, 2)};
+        Eigen::Vector3d vd{d[fv[0]], d[fv[1]], d[fv[2]]};
+        Eigen::Vector2i e0{F(i, 0), F(i, 1)};
+        Eigen::Vector2i e1{F(i, 1), F(i, 2)};
+        Eigen::Vector2i e2{F(i, 2), F(i, 0)};
 
         bool found_cut = true;
-        // We are interested in faces where 2 vertices' distances are closer then t and one is bigger.
-        if ((vd[0] < t && vd[1] < t && vd[2] < t) || (vd[0] > t && vd[1] > t && vd[2] > t)) {
+        // We are interested in faces where 2 vertices' distances are closer than t and one is bigger.
+        if ((vd[0] < t && vd[1] < t && vd[2] < t) ||
+            (vd[0] > t && vd[1] > t && vd[2] > t)) {
             // Not interesting
             found_cut = false;
         }
-        if (vd[0] < t && vd[1] < t && vd[2] > t) {
+        if (vd[0] < t &&
+            vd[1] < t &&
+            vd[2] > t) {
             // We want to add e(v0,v1) = e0
             // e1,e2
             e1_id = 1;
             e2_id = 2;
             cut_mask(i, 0) = 1;
             cuts.push_back(e0);
-        } else if (vd[0] > t && vd[1] < t && vd[2] < t) {
+        } else if (vd[0] > t &&
+                   vd[1] < t &&
+                   vd[2] < t) {
             // We want e(v1,v2) = e1
-            // e2,20
+            // e2,e0
             e1_id = 2;
             e2_id = 0;
             cuts.push_back(e1);
             cut_mask(i, 1) = 1;
-        } else if (vd[0] < t && vd[1] > t && vd[2] < t) {
+        } else if (vd[0] < t &&
+                   vd[1] > t &&
+                   vd[2] < t) {
             // We want e(v0,v2) = e2
             // e0,e1
             e1_id = 0;
@@ -189,18 +204,18 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
             // only vertex
             found_cut = false;
         }
-        if (found_cut == true) {
+        if (found_cut) {
             visited_faces_ids.insert(i);
 
-            std::cout << "=================================" << std::endl;
-            std::cout << "face id: " << current_face_id << std::endl;
-            std::cout << "v0 id: " << fv[0] << " v0 dist: " << d[fv[0]] << std::endl;
-            std::cout << "v1 id: " << fv[1] << " v1 dist: " << d[fv[1]] << std::endl;
-            std::cout << "v2 id: " << fv[2] << " v2 dist: " << d[fv[2]] << std::endl;
-            std::cout << "e0: (" << fv[0] << "," << fv[1] << ")" << std::endl;
-            std::cout << "e1: (" << fv[1] << "," << fv[2] << ")" << std::endl;
-            std::cout << "e2: (" << fv[2] << "," << fv[0] << ")" << std::endl;
-            std::cout << "=================================" << std::endl;
+            std::cout << "================================="                << std::endl;
+            std::cout << "face id: " << current_face_id                     << std::endl;
+            std::cout << "v0 id: "   << fv[0] << " v0 dist: " << d[fv[0]]   << std::endl;
+            std::cout << "v1 id: "   << fv[1] << " v1 dist: " << d[fv[1]]   << std::endl;
+            std::cout << "v2 id: "   << fv[2] << " v2 dist: " << d[fv[2]]   << std::endl;
+            std::cout << "e0: ("     << fv[0] << "," << fv[1] << ")"        << std::endl;
+            std::cout << "e1: ("     << fv[1] << "," << fv[2] << ")"        << std::endl;
+            std::cout << "e2: ("     << fv[2] << "," << fv[0] << ")"        << std::endl;
+            std::cout << "================================="                << std::endl;
             break;
         }
     }
@@ -212,7 +227,7 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
     int next_face_id = FF(current_face_id, e1_id);
     int source_edge_id = FFi(current_face_id, e1_id);
 
-    std::cout << "Mooving from face [" << current_face_id << "], edge [" << e1_id << "] to face ["
+    std::cout << "Moving from face [" << current_face_id << "], edge [" << e1_id << "] to face ["
               << next_face_id << "] edge [" << source_edge_id << "]" << std::endl;
 
     while (next_face_id != first_face) {
@@ -225,29 +240,30 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
 
 
         // find the other edge s.t. d(v1)<t, d(v2) > t
-        std::array<int, 3> fv{F(current_face_id, 0), F(current_face_id, 1), F(current_face_id, 2)};
-        std::array<double, 3> vd{d[fv[0]], d[fv[1]], d[fv[2]]};
+        Eigen::Vector3i fv{F(current_face_id, 0), F(current_face_id, 1), F(current_face_id, 2)};
+        Eigen::Vector3d vd{d[fv[0]], d[fv[1]], d[fv[2]]};
 
-        std::cout << "=================================" << std::endl;
-        std::cout << "face id: " << current_face_id << std::endl;
-        std::cout << "v0 id: " << fv[0] << " v0 dist: " << d[fv[0]] << std::endl;
-        std::cout << "v1 id: " << fv[1] << " v1 dist: " << d[fv[1]] << std::endl;
-        std::cout << "v2 id: " << fv[2] << " v2 dist: " << d[fv[2]] << std::endl;
-        std::cout << "e0: (" << fv[0] << "," << fv[1] << ")" << std::endl;
-        std::cout << "e1: (" << fv[1] << "," << fv[2] << ")" << std::endl;
-        std::cout << "e2: (" << fv[2] << "," << fv[0] << ")" << std::endl;
-        std::cout << "=================================" << std::endl;
+        std::cout << "================================="                << std::endl;
+        std::cout << "face id: " << current_face_id                     << std::endl;
+        std::cout << "v0 id: "   << fv[0] << " v0 dist: " << d[fv[0]]   << std::endl;
+        std::cout << "v1 id: "   << fv[1] << " v1 dist: " << d[fv[1]]   << std::endl;
+        std::cout << "v2 id: "   << fv[2] << " v2 dist: " << d[fv[2]]   << std::endl;
+        std::cout << "e0: ("     << fv[0] << "," << fv[1] << ")"        << std::endl;
+        std::cout << "e1: ("     << fv[1] << "," << fv[2] << ")"        << std::endl;
+        std::cout << "e2: ("     << fv[2] << "," << fv[0] << ")"        << std::endl;
+        std::cout << "================================="                << std::endl;
 
-        std::array<int, 2> e0{F(current_face_id, 0), F(current_face_id, 1)};
-        std::array<int, 2> e1{F(current_face_id, 1), F(current_face_id, 2)};
-        std::array<int, 2> e2{F(current_face_id, 2), F(current_face_id, 0)};
-        std::array<std::array<int, 2>, 3> E{e0, e1, e2};
+        Eigen::Vector2i e0{F(current_face_id, 0), F(current_face_id, 1)};
+        Eigen::Vector2i e1{F(current_face_id, 1), F(current_face_id, 2)};
+        Eigen::Vector2i e2{F(current_face_id, 2), F(current_face_id, 0)};
+        std::array<Eigen::Vector2i, 3> E{e0, e1, e2};
 
         int closer_v = 0;
         int closer_v_source = get_closer_v_id_from_source(E[source_edge_id], d);
         int other_edge_id = 0;
         int candidate_cut_edge_id = 0;
         bool found_other_edge = false;
+
         for (int i = 0; i < E.size(); i++) {
             if (source_edge_id == i) {
                 continue;
@@ -291,12 +307,13 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         // Go to next face
         next_face_id = FF(current_face_id, other_edge_id);
         source_edge_id = FFi(current_face_id, other_edge_id);
-        std::cout << "Mooving from face [" << current_face_id << "], edge [" << other_edge_id << "] to face ["
+        std::cout << "Moving from face [" << current_face_id << "], edge [" << other_edge_id << "] to face ["
                   << next_face_id << "] edge [" << source_edge_id << "]" << std::endl;
     }
     for (auto cut: cuts) {
         std::cout << "(" << cut[0] << "," << cut[1] << ") -> ";
     }
+    std::cout << std::endl;
 }
 
 bool is_other_edge(const int v1, const int v2, const double t, const Eigen::VectorXd &d, int &closer_v) {
@@ -315,7 +332,7 @@ bool is_other_edge(const int v1, const int v2, const double t, const Eigen::Vect
     }
 }
 
-int get_closer_v_id_from_source(const std::array<int, 2> e, const Eigen::VectorXd &d) {
+int get_closer_v_id_from_source(const Eigen::Vector2i e, const Eigen::VectorXd &d) {
     double v1 = e[0];
     double v2 = e[1];
 
@@ -327,35 +344,4 @@ int get_closer_v_id_from_source(const std::array<int, 2> e, const Eigen::VectorX
     } else {
         return e[1];
     }
-}
-
-void draw_mesh() {// Inline mesh of a cube
-    const Eigen::MatrixXd V = (Eigen::MatrixXd(8, 3) <<
-                                                     0.0, 0.0, 0.0,
-            0.0, 0.0, 1.0,
-            0.0, 1.0, 0.0,
-            0.0, 1.0, 1.0,
-            1.0, 0.0, 0.0,
-            1.0, 0.0, 1.0,
-            1.0, 1.0, 0.0,
-            1.0, 1.0, 1.0).finished();
-    const Eigen::MatrixXi F = (Eigen::MatrixXi(12, 3) <<
-                                                      1, 7, 5,
-            1, 3, 7,
-            1, 4, 3,
-            1, 2, 4,
-            3, 8, 7,
-            3, 4, 8,
-            5, 7, 8,
-            5, 8, 6,
-            1, 5, 6,
-            1, 6, 2,
-            2, 6, 8,
-            2, 8, 4).finished().array() - 1;
-
-    // Plot the mesh
-    igl::opengl::glfw::Viewer viewer;
-    viewer.data().set_mesh(V, F);
-    viewer.data().set_face_based(true);
-    viewer.launch();
 }

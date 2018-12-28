@@ -19,13 +19,9 @@
 #include <iostream>
 
 
-void hello_mesh();
-
-void draw_mesh();
-
-void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d);
-bool is_other_edge(const int v1,const int v2, const double t,const Eigen::VectorXd &d, int& smaller_v);
-int get_closer_v_id_from_source(const std::array<int, 2> e, const Eigen::VectorXd &d);
+void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d, std::vector<Eigen::Vector2i> &cuts);
+bool is_other_edge(const int v1, const int v2, const double t, const Eigen::VectorXd &d, int &smaller_v);
+int get_closer_v_id_from_source(const Eigen::Vector2i e, const Eigen::VectorXd &d);
 
 void sample_random_point(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, igl::opengl::glfw::Viewer &viewer);
 
