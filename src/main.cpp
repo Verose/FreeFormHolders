@@ -6,6 +6,12 @@
 #include <igl/HalfEdgeIterator.h>
 #include <igl/cut_mesh.h>
 
+#include <iostream>
+#include <fstream>
+#include <array>
+#include <unordered_map>
+#include <set>
+
 #include "main.h"
 #include "model_path.h"
 
@@ -21,7 +27,7 @@ int main(int argc, char *argv[]) {
     Eigen::VectorXd d;
 
     // Load a mesh
-    igl::readOBJ(MODEL_PATH "/cube2.obj", V, F);
+    igl::readOBJ(MODEL_PATH "/cow.obj", V, F);
 
     igl::opengl::glfw::Viewer viewer;
 
@@ -130,12 +136,69 @@ void sample_random_point(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, igl
 }
 
 
+void save_grip_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d, const double t) {
+    std::unordered_map<int, int> old_to_new_vertex_id_map;
+    std::set<int> in_vertices_ids;
+
+    std::ofstream grip_mesh;
+    grip_mesh.open(MODEL_PATH "/grip_mesh.obj");
+    grip_mesh << "# grip_mesh \n";
+
+    int num_vertices = 0;
+    for (int i = 0; i < V.rows(); i++) {
+        if (d[i] < t) {
+            // v v0 v1 v2
+            grip_mesh << "v " << V(i, 0) << " " << V(i, 1) << " " << V(i, 2) << "\n";
+            grip_mesh.flush();
+            num_vertices++;
+            old_to_new_vertex_id_map[i] = num_vertices;
+            in_vertices_ids.insert(i);
+
+        }
+    }
+    for (int i = 0; i < F.rows(); i++) {
+        Eigen::Vector3i fv{F(i, 0), F(i, 1), F(i, 2)};
+        bool save_face =
+                in_vertices_ids.find(fv[0]) != in_vertices_ids.end() &&
+                in_vertices_ids.find(fv[1]) != in_vertices_ids.end() &&
+                in_vertices_ids.find(fv[2]) != in_vertices_ids.end();
+
+        if (save_face) {
+            int v0 = old_to_new_vertex_id_map[fv[0]];
+            int v1 = old_to_new_vertex_id_map[fv[1]];
+            int v2 = old_to_new_vertex_id_map[fv[2]];
+
+            // f 45//45 193//193 281//281
+            grip_mesh << "f " << v0 << "//" << v0 << " "
+                      << v1 << "//" << v1 << " "
+                      << v2 << "//" << v2 << "\n";
+            grip_mesh.flush();
+        }
+    }
+    grip_mesh.close();
+
+    // Display gripper
+    Eigen::MatrixXd V_grip;
+    Eigen::MatrixXi F_grip;
+    igl::readOBJ(MODEL_PATH "/grip_mesh.obj", V_grip, F_grip);
+
+    igl::opengl::glfw::Viewer viewer2;
+    viewer2.data().set_mesh(V_grip, F_grip);
+    viewer2.data().set_face_based(true);
+    viewer2.launch();
+    viewer2.launch();
+
+}
+
 void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d,
                std::vector<Eigen::Vector2i> &cuts) {
     std::cout << "Calc Grip" << std::endl;
 
     double max_distance = d.maxCoeff();
-    double t = max_distance * 0.8;
+    double t = max_distance * 0.5;
+
+    // Generating the mesh without using the calculated cut.
+    save_grip_mesh(V, F, d, t);
 
     // #F by #3 adjacent matrix, the element i,j is the id of the triangle
     // adjacent to the j edge of triangle i
@@ -207,15 +270,15 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         if (found_cut) {
             visited_faces_ids.insert(i);
 
-            std::cout << "================================="                << std::endl;
-            std::cout << "face id: " << current_face_id                     << std::endl;
-            std::cout << "v0 id: "   << fv[0] << " v0 dist: " << d[fv[0]]   << std::endl;
-            std::cout << "v1 id: "   << fv[1] << " v1 dist: " << d[fv[1]]   << std::endl;
-            std::cout << "v2 id: "   << fv[2] << " v2 dist: " << d[fv[2]]   << std::endl;
-            std::cout << "e0: ("     << fv[0] << "," << fv[1] << ")"        << std::endl;
-            std::cout << "e1: ("     << fv[1] << "," << fv[2] << ")"        << std::endl;
-            std::cout << "e2: ("     << fv[2] << "," << fv[0] << ")"        << std::endl;
-            std::cout << "================================="                << std::endl;
+            std::cout << "=================================" << std::endl;
+            std::cout << "face id: " << current_face_id << std::endl;
+            std::cout << "v0 id: " << fv[0] << " v0 dist: " << d[fv[0]] << std::endl;
+            std::cout << "v1 id: " << fv[1] << " v1 dist: " << d[fv[1]] << std::endl;
+            std::cout << "v2 id: " << fv[2] << " v2 dist: " << d[fv[2]] << std::endl;
+            std::cout << "e0: (" << fv[0] << "," << fv[1] << ")" << std::endl;
+            std::cout << "e1: (" << fv[1] << "," << fv[2] << ")" << std::endl;
+            std::cout << "e2: (" << fv[2] << "," << fv[0] << ")" << std::endl;
+            std::cout << "=================================" << std::endl;
             break;
         }
     }
@@ -243,15 +306,15 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         Eigen::Vector3i fv{F(current_face_id, 0), F(current_face_id, 1), F(current_face_id, 2)};
         Eigen::Vector3d vd{d[fv[0]], d[fv[1]], d[fv[2]]};
 
-        std::cout << "================================="                << std::endl;
-        std::cout << "face id: " << current_face_id                     << std::endl;
-        std::cout << "v0 id: "   << fv[0] << " v0 dist: " << d[fv[0]]   << std::endl;
-        std::cout << "v1 id: "   << fv[1] << " v1 dist: " << d[fv[1]]   << std::endl;
-        std::cout << "v2 id: "   << fv[2] << " v2 dist: " << d[fv[2]]   << std::endl;
-        std::cout << "e0: ("     << fv[0] << "," << fv[1] << ")"        << std::endl;
-        std::cout << "e1: ("     << fv[1] << "," << fv[2] << ")"        << std::endl;
-        std::cout << "e2: ("     << fv[2] << "," << fv[0] << ")"        << std::endl;
-        std::cout << "================================="                << std::endl;
+        std::cout << "=================================" << std::endl;
+        std::cout << "face id: " << current_face_id << std::endl;
+        std::cout << "v0 id: " << fv[0] << " v0 dist: " << d[fv[0]] << std::endl;
+        std::cout << "v1 id: " << fv[1] << " v1 dist: " << d[fv[1]] << std::endl;
+        std::cout << "v2 id: " << fv[2] << " v2 dist: " << d[fv[2]] << std::endl;
+        std::cout << "e0: (" << fv[0] << "," << fv[1] << ")" << std::endl;
+        std::cout << "e1: (" << fv[1] << "," << fv[2] << ")" << std::endl;
+        std::cout << "e2: (" << fv[2] << "," << fv[0] << ")" << std::endl;
+        std::cout << "=================================" << std::endl;
 
         Eigen::Vector2i e0{F(current_face_id, 0), F(current_face_id, 1)};
         Eigen::Vector2i e1{F(current_face_id, 1), F(current_face_id, 2)};
@@ -314,15 +377,6 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         std::cout << "(" << cut[0] << "," << cut[1] << ") -> ";
     }
     std::cout << std::endl;
-
-    Eigen::MatrixXd V2;
-    Eigen::MatrixXi F2;
-    igl::cut_mesh(V, F, cut_mask, V2, F2);
-
-    igl::opengl::glfw::Viewer viewer2;
-    viewer2.data().set_mesh(V2, F2);
-    viewer2.data().set_face_based(true);
-    viewer2.launch();
 }
 
 bool is_other_edge(const int v1, const int v2, const double t, const Eigen::VectorXd &d, int &closer_v) {
