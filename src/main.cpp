@@ -135,7 +135,7 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
     std::cout << "Calc Grip" << std::endl;
 
     double max_distance = d.maxCoeff();
-    double t = max_distance * 0.2;
+    double t = max_distance * 0.8;
 
     // #F by #3 adjacent matrix, the element i,j is the id of the triangle
     // adjacent to the j edge of triangle i
@@ -314,6 +314,15 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         std::cout << "(" << cut[0] << "," << cut[1] << ") -> ";
     }
     std::cout << std::endl;
+
+    Eigen::MatrixXd V2;
+    Eigen::MatrixXi F2;
+    igl::cut_mesh(V, F, cut_mask, V2, F2);
+
+    igl::opengl::glfw::Viewer viewer2;
+    viewer2.data().set_mesh(V2, F2);
+    viewer2.data().set_face_based(true);
+    viewer2.launch();
 }
 
 bool is_other_edge(const int v1, const int v2, const double t, const Eigen::VectorXd &d, int &closer_v) {
