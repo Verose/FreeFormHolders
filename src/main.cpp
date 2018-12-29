@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
     Eigen::VectorXd d;
 
     // Load a mesh
-    igl::readOBJ(MODEL_PATH "/cow.obj", V, F);
+    igl::readOBJ(MODEL_PATH "/Cow.obj", V, F);
 
     igl::opengl::glfw::Viewer viewer;
 
@@ -45,25 +45,18 @@ int main(int argc, char *argv[]) {
         d = (d * 1000).array().eval();
 
         viewer.data().clear();
+
+        // Generating the mesh without using the calculated cut.
+        double max_distance = d.maxCoeff();
+        double t = max_distance * 0.5;
+        save_grip_mesh(V, F, d, t);
+
         std::vector<Eigen::Vector2i> cuts;
-        calc_grip(V, F, d, cuts);
+        calc_grip(V, F, d, t, cuts);
 
-        for (int i = 0; i < cuts.size(); i++) {
-            double point_index_start = cuts[i][0];
-            double point_index_end = cuts[i][1];
-            Eigen::RowVector3d point_start(V(point_index_start, 0), V(point_index_start, 1), V(point_index_start, 2));
-            Eigen::RowVector3d point_end(V(point_index_end, 0), V(point_index_end, 1), V(point_index_end, 2));
-            viewer.data().add_points(point_start, Eigen::RowVector3d(1, 0, 0));  // show the first point of each edge
-            viewer.data().add_edges(point_start, point_end, Eigen::RowVector3d(1, 0, 0));  // print edge (it's printed but not visible)
-        }
+        display_cut(V, F, d, viewer, cuts);
 
-        // Compute per-vertex colors
-        Eigen::MatrixXd C;
-        igl::colormap(igl::COLOR_MAP_TYPE_INFERNO, d, true, C);
-
-        // Plot the mesh
-        viewer.data().set_mesh(V, F);
-        viewer.data().set_colors(C);
+        display_gripper();
     };
 
     // Plot a distance when a vertex is picked
@@ -99,42 +92,31 @@ int main(int argc, char *argv[]) {
     viewer.data().set_mesh(V, F);
 
     std::cout << "Click on mesh to define the source.\n" << std::endl;
-    update_distance(0);
+    update_distance(1348);
     viewer.launch();
-
-    // sample_random_point(V, F, viewer);
-
-
 
     return 0;
 }
 
-void sample_random_point(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, igl::opengl::glfw::Viewer &viewer) {
-    // Print the vertices and faces matrices
-    std::cout << "Vertices: " << std::endl << V << std::endl;
-    std::cout << "Faces:    " << std::endl << F << std::endl;
+void display_cut(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd d,
+        igl::opengl::glfw::Viewer &viewer, const std::vector<Eigen::Vector2i> &cuts) {
+    for (const auto &cut : cuts) {
+        double point_index_start = cut[0];
+        double point_index_end = cut[1];
+        Eigen::RowVector3d point_start(V(point_index_start, 0), V(point_index_start, 1), V(point_index_start, 2));
+        Eigen::RowVector3d point_end(V(point_index_end, 0), V(point_index_end, 1), V(point_index_end, 2));
+        viewer.data().add_points(point_start, Eigen::RowVector3d(1, 0, 0));  // show the first point of each edge
+        viewer.data().add_edges(point_start, point_end, Eigen::RowVector3d(1, 0, 0));  // print edge (it's printed but not visible)
+    }
 
-    // Sample 1 random point on mesh
-    // Given by barycentric coordinates of the sampled point in face FI
-    Eigen::VectorXi FI;
-    Eigen::SparseMatrix<double> B;
-    igl::random_points_on_mesh(1, V, F, B, FI);
-
-    // convert barycenter coordinates to original sampled point
-    Eigen::MatrixXd V_sample = B * V;
+    // Compute per-vertex colors
+    Eigen::MatrixXd C;
+    igl::colormap(igl::COLOR_MAP_TYPE_INFERNO, d, true, C);
 
     // Plot the mesh
-    viewer.data().set_mesh(V, F);  // copies the mesh into the viewer
-
-    viewer.data().add_points(V_sample, Eigen::RowVector3d(1, 0, 0));  // print sampled point
-
-    viewer.launch();  // creates a window, an OpenGL context and it starts the draw loop
-
-    // Save the mesh
-    // writeOBJ(MODEL_PATH "/bunny_new.obj", V, F);
-
+    viewer.data().set_mesh(V, F);
+    viewer.data().set_colors(C);
 }
-
 
 void save_grip_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d, const double t) {
     std::unordered_map<int, int> old_to_new_vertex_id_map;
@@ -153,7 +135,6 @@ void save_grip_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Ei
             num_vertices++;
             old_to_new_vertex_id_map[i] = num_vertices;
             in_vertices_ids.insert(i);
-
         }
     }
     for (int i = 0; i < F.rows(); i++) {
@@ -169,36 +150,45 @@ void save_grip_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Ei
             int v2 = old_to_new_vertex_id_map[fv[2]];
 
             // f 45//45 193//193 281//281
-            grip_mesh << "f " << v0 << "//" << v0 << " "
+            grip_mesh << "f "
+                      << v0 << "//" << v0 << " "
                       << v1 << "//" << v1 << " "
                       << v2 << "//" << v2 << "\n";
             grip_mesh.flush();
         }
     }
     grip_mesh.close();
+}
 
+void display_gripper() {
     // Display gripper
     Eigen::MatrixXd V_grip;
     Eigen::MatrixXi F_grip;
     igl::readOBJ(MODEL_PATH "/grip_mesh.obj", V_grip, F_grip);
 
+    Eigen::MatrixXd N;
+    Eigen::Vector3d Z(0, 0, 0);
+//    Eigen::Vector3d Z(1, 1, 1);
+//    Z.normalized();
+
+    // Load a mesh
+//    igl::per_face_normals(V, F, Z, N);
+    igl::per_vertex_normals(V_grip, F_grip, N);
+
     igl::opengl::glfw::Viewer viewer2;
     viewer2.data().set_mesh(V_grip, F_grip);
     viewer2.data().set_face_based(true);
     viewer2.launch();
-    viewer2.launch();
 
+    igl::opengl::glfw::Viewer viewer3;
+    viewer3.data().set_mesh(N, F_grip);
+    viewer3.data().set_face_based(true);
+    viewer3.launch();
 }
 
-void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d,
+void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d, const double t,
                std::vector<Eigen::Vector2i> &cuts) {
     std::cout << "Calc Grip" << std::endl;
-
-    double max_distance = d.maxCoeff();
-    double t = max_distance * 0.5;
-
-    // Generating the mesh without using the calculated cut.
-    save_grip_mesh(V, F, d, t);
 
     // #F by #3 adjacent matrix, the element i,j is the id of the triangle
     // adjacent to the j edge of triangle i
