@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
 
         display_cut(V, F, d, viewer, cuts);
 
-        display_gripper();
+        display_gripper(viewer);
     };
 
     // Plot a distance when a vertex is picked
@@ -160,30 +160,38 @@ void save_grip_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Ei
     grip_mesh.close();
 }
 
-void display_gripper() {
+void display_gripper(igl::opengl::glfw::Viewer &viewer) {
     // Display gripper
     Eigen::MatrixXd V_grip;
     Eigen::MatrixXi F_grip;
     igl::readOBJ(MODEL_PATH "/grip_mesh.obj", V_grip, F_grip);
 
-    Eigen::MatrixXd N;
-    Eigen::Vector3d Z(0, 0, 0);
-//    Eigen::Vector3d Z(1, 1, 1);
-//    Z.normalized();
+    Eigen::MatrixXd N, N_faces;
 
     // Load a mesh
-//    igl::per_face_normals(V, F, Z, N);
-    igl::per_vertex_normals(V_grip, F_grip, N);
+    igl::per_vertex_normals(
+            V_grip,
+            F_grip,
+            igl::PerVertexNormalsWeightingType::PER_VERTEX_NORMALS_WEIGHTING_TYPE_AREA,
+            N);
+    double stride = 0.02;
+    Eigen::MatrixXd result(V_grip.rows(), 3);
 
-    igl::opengl::glfw::Viewer viewer2;
-    viewer2.data().set_mesh(V_grip, F_grip);
-    viewer2.data().set_face_based(true);
-    viewer2.launch();
+    for (int i = 0; i < V_grip.rows(); i++) {
+        Eigen::RowVector3d point(V_grip(i, 0), V_grip(i, 1), V_grip(i, 2));
+        Eigen::RowVector3d normal(N(i, 0), N(i, 1), N(i, 2));
+        Eigen::RowVector3d sub = normal - point;
+        sub.normalize();
+        Eigen::RowVector3d res = point + stride*sub;
+        result(i, 0) = res(0);
+        result(i, 1) = res(1);
+        result(i, 2) = res(2);
+        viewer.data().add_points(res, Eigen::RowVector3d(0, 1, 0));
+    }
 
-    igl::opengl::glfw::Viewer viewer3;
-    viewer3.data().set_mesh(N, F_grip);
-    viewer3.data().set_face_based(true);
-    viewer3.launch();
+    igl::writeOBJ(MODEL_PATH "/grip_mesh_normal.obj", result, F_grip);
+
+    viewer.launch();
 }
 
 void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d, const double t,
