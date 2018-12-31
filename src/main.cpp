@@ -4,7 +4,7 @@
 #include <igl/triangle_triangle_adjacency.h>
 #include <igl/adjacency_matrix.h>
 #include <igl/HalfEdgeIterator.h>
-#include <igl/cut_mesh.h>
+#include <igl/combine.h>
 
 #include <iostream>
 #include <fstream>
@@ -55,8 +55,9 @@ int main(int argc, char *argv[]) {
         calc_grip(V, F, d, t, cuts);
 
         display_cut(V, F, d, viewer, cuts);
-
-        display_gripper(viewer);
+        move_gripper_in_normal_direction();
+        invert_gripper_normal_direction();
+        combine_meshes();
     };
 
     // Plot a distance when a vertex is picked
@@ -160,13 +161,12 @@ void save_grip_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Ei
     grip_mesh.close();
 }
 
-void display_gripper(igl::opengl::glfw::Viewer &viewer) {
-    // Display gripper
+void move_gripper_in_normal_direction() {
     Eigen::MatrixXd V_grip;
     Eigen::MatrixXi F_grip;
     igl::readOBJ(MODEL_PATH "/grip_mesh.obj", V_grip, F_grip);
 
-    Eigen::MatrixXd N, N_faces;
+    Eigen::MatrixXd N;
 
     // Load a mesh
     igl::per_vertex_normals(
@@ -186,12 +186,39 @@ void display_gripper(igl::opengl::glfw::Viewer &viewer) {
         result(i, 0) = res(0);
         result(i, 1) = res(1);
         result(i, 2) = res(2);
-        viewer.data().add_points(res, Eigen::RowVector3d(0, 1, 0));
     }
 
-    igl::writeOBJ(MODEL_PATH "/grip_mesh_normal.obj", result, F_grip);
+    igl::writeOBJ(MODEL_PATH "/grip_mesh_out.obj", result, F_grip);
+}
 
-    viewer.launch();
+void invert_gripper_normal_direction() {
+    Eigen::MatrixXd V_grip;
+    Eigen::MatrixXi F_grip;
+    igl::readOBJ(MODEL_PATH "/grip_mesh.obj", V_grip, F_grip);
+    Eigen::MatrixXi F_grip_inv(F_grip.rows(), 3);
+
+    Eigen::MatrixXi N;
+
+    for (int i = 0; i < F_grip.rows(); i++) {
+        F_grip_inv(i, 0) = F_grip(i, 2);
+        F_grip_inv(i, 2) = F_grip(i, 0);
+        F_grip_inv(i, 1) = F_grip(i, 1);
+    }
+
+    igl::writeOBJ(MODEL_PATH "/grip_mesh_in.obj", V_grip, F_grip_inv);
+}
+
+void combine_meshes() {
+    Eigen::MatrixXd V_grip_in, V_grip_out, V;
+    Eigen::MatrixXi F_grip_in, F_grip_out, F;
+    igl::readOBJ(MODEL_PATH "/grip_mesh_in.obj", V_grip_in, F_grip_in);
+    igl::readOBJ(MODEL_PATH "/grip_mesh_out.obj", V_grip_out, F_grip_out);
+    std::vector<Eigen::MatrixXd> V_list{V_grip_in, V_grip_out};
+    std::vector<Eigen::MatrixXi> F_list{F_grip_in, F_grip_out};
+
+    igl::combine(V_list, F_list, V, F);
+
+    igl::writeOBJ(MODEL_PATH "/holder.obj", V, F);
 }
 
 void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d, const double t,
