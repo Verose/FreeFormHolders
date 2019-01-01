@@ -19,6 +19,10 @@
 //FT = f1
 //d  = 1  3   4  4
 
+#ifndef DEBUG
+#define DEBUG false
+#endif
+
 
 int main(int argc, char *argv[]) {
 //    bool init = false;
@@ -31,7 +35,7 @@ int main(int argc, char *argv[]) {
 
     igl::opengl::glfw::Viewer viewer;
 
-    const auto update_distance = [&](const int vid) {
+    const auto show_holder_with_distances = [&](const int vid) {
         Eigen::VectorXi VS, FS, VT, FT;
         // The selected vertex is the source
         VS.resize(1);
@@ -44,8 +48,6 @@ int main(int argc, char *argv[]) {
         // The function should be 1 on each integer coordinate
         d = (d * 1000).array().eval();
 
-        viewer.data().clear();
-
         // Generating the mesh without using the calculated cut.
         double max_distance = d.maxCoeff();
         double t = max_distance * 0.5;
@@ -55,9 +57,6 @@ int main(int argc, char *argv[]) {
         calc_grip(V, F, d, t, cuts);
 
         display_cut(V, F, d, viewer, cuts);
-        move_gripper_in_normal_direction();
-        invert_gripper_normal_direction();
-        combine_meshes();
     };
 
     // Plot a distance when a vertex is picked
@@ -69,31 +68,44 @@ int main(int argc, char *argv[]) {
                 double x = viewer.current_mouse_x;
                 double y = viewer.core.viewport(3) - viewer.current_mouse_y;
 
-                if (igl::unproject_onto_mesh(
-                        Eigen::Vector2f(x, y),
-                        viewer.core.view,
-                        viewer.core.proj,
-                        viewer.core.viewport,
-                        V,
-                        F,
-                        fid,
-                        bc)) {
-//                    if (init) { // Only once
-//                        return true;
-//                    }
-//                    init = true;
+                if (igl::unproject_onto_mesh(Eigen::Vector2f(x, y), viewer.core.view, viewer.core.proj,
+                                             viewer.core.viewport, V, F, fid, bc)) {
                     int max;
                     bc.maxCoeff(&max);
                     int vid = F(fid, max);
-                    update_distance(vid);
-                    return true;
+                    viewer.data().clear();
+                    show_holder_with_distances(vid);
+
+                    std::cout << "Press key '1' to finalize the mesh or pick a new point" << std::endl;
                 }
                 return false;
             };
-    viewer.data().set_mesh(V, F);
+    viewer.callback_key_down =
+            [&](igl::opengl::glfw::Viewer& viewer, unsigned char key, int) -> bool {
+                if (key == '1') {
+                    viewer.data().clear();
+                    move_gripper_in_normal_direction();
+                    invert_gripper_normal_direction();
+                    combine_meshes();
 
-    std::cout << "Click on mesh to define the source.\n" << std::endl;
-    update_distance(1348);
+                    Eigen::MatrixXd V_holder;
+                    Eigen::MatrixXi F_holder;
+                    igl::readOBJ(MODEL_PATH "/holder.obj", V_holder, F_holder);
+
+                    viewer.data().set_mesh(V_holder, F_holder);
+
+                    std::cout << "Your new cut is ready!" << std::endl;
+                    std::cout << "To reset press key '2'" << std::endl;
+                }
+                else if (key == '2') {
+                    viewer.data().clear();
+                    viewer.data().set_mesh(V, F);
+                }
+                return false;
+            };
+
+    viewer.data().set_mesh(V, F);
+    std::cout << "Click on mesh to define source for holder\n" << std::endl;
     viewer.launch();
 
     return 0;
@@ -295,6 +307,7 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         if (found_cut) {
             visited_faces_ids.insert(i);
 
+#if DEBUG
             std::cout << "=================================" << std::endl;
             std::cout << "face id: " << current_face_id << std::endl;
             std::cout << "v0 id: " << fv[0] << " v0 dist: " << d[fv[0]] << std::endl;
@@ -304,19 +317,20 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
             std::cout << "e1: (" << fv[1] << "," << fv[2] << ")" << std::endl;
             std::cout << "e2: (" << fv[2] << "," << fv[0] << ")" << std::endl;
             std::cout << "=================================" << std::endl;
+#endif
             break;
         }
     }
 
     int first_face = current_face_id;
-
-    std::cout << "Found first face: " << current_face_id << std::endl;
-
     int next_face_id = FF(current_face_id, e1_id);
     int source_edge_id = FFi(current_face_id, e1_id);
 
+#if DEBUG
+    std::cout << "Found first face: " << current_face_id << std::endl;
     std::cout << "Moving from face [" << current_face_id << "], edge [" << e1_id << "] to face ["
               << next_face_id << "] edge [" << source_edge_id << "]" << std::endl;
+#endif
 
     while (next_face_id != first_face) {
         current_face_id = next_face_id;
@@ -330,7 +344,7 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         // find the other edge s.t. d(v1)<t, d(v2) > t
         Eigen::Vector3i fv{F(current_face_id, 0), F(current_face_id, 1), F(current_face_id, 2)};
         Eigen::Vector3d vd{d[fv[0]], d[fv[1]], d[fv[2]]};
-
+#if DEBUG
         std::cout << "=================================" << std::endl;
         std::cout << "face id: " << current_face_id << std::endl;
         std::cout << "v0 id: " << fv[0] << " v0 dist: " << d[fv[0]] << std::endl;
@@ -340,7 +354,7 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         std::cout << "e1: (" << fv[1] << "," << fv[2] << ")" << std::endl;
         std::cout << "e2: (" << fv[2] << "," << fv[0] << ")" << std::endl;
         std::cout << "=================================" << std::endl;
-
+#endif
         Eigen::Vector2i e0{F(current_face_id, 0), F(current_face_id, 1)};
         Eigen::Vector2i e1{F(current_face_id, 1), F(current_face_id, 2)};
         Eigen::Vector2i e2{F(current_face_id, 2), F(current_face_id, 0)};
@@ -368,8 +382,9 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
                 break;
             }
         }
+#if DEBUG
         std::cout << "Found other edge: " << found_other_edge << std::endl;
-
+#endif
         // If add vertex - just go to next face
         // else add edge
         e1_id = source_edge_id;
@@ -395,27 +410,39 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         // Go to next face
         next_face_id = FF(current_face_id, other_edge_id);
         source_edge_id = FFi(current_face_id, other_edge_id);
+#if DEBUG
         std::cout << "Moving from face [" << current_face_id << "], edge [" << other_edge_id << "] to face ["
                   << next_face_id << "] edge [" << source_edge_id << "]" << std::endl;
+#endif
     }
+#if DEBUG
     for (auto cut: cuts) {
         std::cout << "(" << cut[0] << "," << cut[1] << ") -> ";
     }
     std::cout << std::endl;
+#endif
 }
 
 bool is_other_edge(const int v1, const int v2, const double t, const Eigen::VectorXd &d, int &closer_v) {
+#if DEBUG
     std::cout << "v1 dist: " << d[v1] << " v2 dist: " << d[v2];
+#endif
     if (d[v1] > t && d[v2] < t) {
         closer_v = v2;
+#if DEBUG
         std::cout << " Found other edge" << std::endl;
+#endif
         return true;
     } else if (d[v2] > t && d[v1] < t) {
         closer_v = v1;
+#if DEBUG
         std::cout << " Found other edge" << std::endl;
+#endif
         return true;
     } else {
+#if DEBUG
         std::cout << " Not other edge" << std::endl;
+#endif
         return false;
     }
 }
