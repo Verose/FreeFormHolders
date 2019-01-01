@@ -6,6 +6,11 @@
 #include <igl/HalfEdgeIterator.h>
 #include <igl/combine.h>
 
+#include <igl/opengl/glfw/Viewer.h>
+#include <igl/opengl/glfw/imgui/ImGuiMenu.h>
+#include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
+#include <imgui/imgui.h>
+
 #include <iostream>
 #include <fstream>
 #include <array>
@@ -35,6 +40,39 @@ int main(int argc, char *argv[]) {
 
     igl::opengl::glfw::Viewer viewer;
 
+    // Attach a menu plugin
+    igl::opengl::glfw::imgui::ImGuiMenu menu;
+    viewer.plugins.push_back(&menu);
+
+    // Customize the menu
+    double distance_mod = 0.5;
+    double holder_width = 0.02;
+
+    // Add content to the default menu window
+    menu.callback_draw_viewer_menu = [&]()
+    {
+        // Draw parent menu content
+        menu.draw_viewer_menu();
+//        menu.shutdown();
+    };
+
+    // Draw additional windows
+    menu.callback_draw_custom_window = [&]()
+    {
+        // Define next window position + size
+        ImGui::SetNextWindowPos(ImVec2(180.f * menu.menu_scaling(), 10), ImGuiSetCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(200, 100), ImGuiSetCond_FirstUseEver);
+        ImGui::Begin("Holder Parameters", nullptr, ImGuiWindowFlags_NoSavedSettings);
+
+        // Expose the same variable directly ...
+        ImGui::PushItemWidth(-80);
+        ImGui::DragScalar("max distance %", ImGuiDataType_Double, &distance_mod, 0.1, 0, 0, "%.2f");
+        ImGui::DragScalar("holder width", ImGuiDataType_Double, &holder_width, 0.1, 0, 0, "%.2f");
+        ImGui::PopItemWidth();
+
+        ImGui::End();
+    };
+
     const auto show_holder_with_distances = [&](const int vid) {
         Eigen::VectorXi VS, FS, VT, FT;
         // The selected vertex is the source
@@ -50,7 +88,7 @@ int main(int argc, char *argv[]) {
 
         // Generating the mesh without using the calculated cut.
         double max_distance = d.maxCoeff();
-        double t = max_distance * 0.5;
+        double t = max_distance * distance_mod;
         save_grip_mesh(V, F, d, t);
 
         std::vector<Eigen::Vector2i> cuts;
@@ -84,7 +122,7 @@ int main(int argc, char *argv[]) {
             [&](igl::opengl::glfw::Viewer& viewer, unsigned char key, int) -> bool {
                 if (key == '1') {
                     viewer.data().clear();
-                    move_gripper_in_normal_direction();
+                    move_gripper_in_normal_direction(holder_width);
                     invert_gripper_normal_direction();
                     combine_meshes();
 
@@ -173,7 +211,7 @@ void save_grip_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Ei
     grip_mesh.close();
 }
 
-void move_gripper_in_normal_direction() {
+void move_gripper_in_normal_direction(double holder_width) {
     Eigen::MatrixXd V_grip;
     Eigen::MatrixXi F_grip;
     igl::readOBJ(MODEL_PATH "/grip_mesh.obj", V_grip, F_grip);
@@ -186,7 +224,6 @@ void move_gripper_in_normal_direction() {
             F_grip,
             igl::PerVertexNormalsWeightingType::PER_VERTEX_NORMALS_WEIGHTING_TYPE_AREA,
             N);
-    double stride = 0.02;
     Eigen::MatrixXd result(V_grip.rows(), 3);
 
     for (int i = 0; i < V_grip.rows(); i++) {
@@ -194,7 +231,7 @@ void move_gripper_in_normal_direction() {
         Eigen::RowVector3d normal(N(i, 0), N(i, 1), N(i, 2));
         Eigen::RowVector3d sub = normal - point;
         sub.normalize();
-        Eigen::RowVector3d res = point + stride*sub;
+        Eigen::RowVector3d res = point + holder_width*sub;
         result(i, 0) = res(0);
         result(i, 1) = res(1);
         result(i, 2) = res(2);

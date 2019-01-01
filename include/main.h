@@ -28,7 +28,7 @@ int get_closer_v_id_from_source(const Eigen::Vector2i e, const Eigen::VectorXd &
 
 void save_grip_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d, const double t);
 
-void move_gripper_in_normal_direction();
+void move_gripper_in_normal_direction(double holder_width);
 
 void display_cut(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXd d,
 igl::opengl::glfw::Viewer &viewer, const std::vector<Eigen::Vector2i> &cuts);

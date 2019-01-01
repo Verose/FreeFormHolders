@@ -22,4 +22,9 @@ set(HEADERS
 
 add_executable(FreeFormHolders ${SOURCES} ${HEADERS})
 
-target_link_libraries(FreeFormHolders igl::core igl::opengl igl::opengl_glfw)
+target_link_libraries(FreeFormHolders
+        igl::core
+        igl::opengl
+        igl::opengl_glfw
+        igl::opengl_glfw_imgui
+        )
