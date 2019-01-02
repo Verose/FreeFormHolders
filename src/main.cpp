@@ -51,6 +51,7 @@ int main(int argc, char *argv[]) {
     // Customize the menu
     double distance_mod = 0.5;
     double holder_width = 0.02;
+    bool cut_selected = false;
 
     // Add content to the default menu window
     menu.callback_draw_viewer_menu = [&]()
@@ -64,16 +65,15 @@ int main(int argc, char *argv[]) {
     {
         // Define next window position + size
         ImGui::SetNextWindowPos(ImVec2(180.f * menu.menu_scaling(), 10), ImGuiSetCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(220, 160), ImGuiSetCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(250, 160), ImGuiSetCond_FirstUseEver);
         ImGui::Begin("Holder Parameters", nullptr, ImGuiWindowFlags_NoSavedSettings);
 
-        // Expose the same variable directly ...
-        ImGui::PushItemWidth(-80);
-        ImGui::DragScalar("Max Distance %", ImGuiDataType_Double, &distance_mod, 0.1, nullptr, nullptr, "%.2f");
-        ImGui::DragScalar("Holder Width", ImGuiDataType_Double, &holder_width, 0.1, nullptr, nullptr, "%.2f");
+        // Expose the variables directly
+        ImGui::PushItemWidth(-100);
+        ImGui::InputDouble("Max Distance %", &distance_mod, 0.05, 0.1, "%.2f");
+        ImGui::InputDouble("Holder Width", &holder_width, 0.005, 0.01, "%.3f");
+        ImGui::InputText("Save Holder Path", save_path);
         ImGui::PopItemWidth();
-
-        ImGui::InputText("Output holder location", save_path);
 
         ImGui::Text("(1) Create");
         ImGui::Text("(2) Clear");
@@ -109,6 +109,12 @@ int main(int argc, char *argv[]) {
     viewer.callback_mouse_down =
             [&](igl::opengl::glfw::Viewer &viewer, int, int) -> bool {
                 int fid;
+
+                // Don't allow to pick new source if cut is selected
+                if (cut_selected) {
+                    return false;
+                }
+
                 Eigen::Vector3f bc;
                 // Cast a ray in the view direction starting from the mouse position
                 double x = viewer.current_mouse_x;
@@ -144,12 +150,14 @@ int main(int argc, char *argv[]) {
 
                     std::cout << "Your new cut is ready!" << std::endl;
                     std::cout << "To reset press '2', to save press '3'" << std::endl;
+                    cut_selected = true;
                 }
                 else if (key == '2') {
                     viewer.data().clear();
                     viewer.data().set_mesh(V, F);
                     std::cout << "Resetting to original mesh" << std::endl;
                     std::cout << "To choose new source for holder press '1', to save press '3'" << std::endl;
+                    cut_selected = false;
                 }
                 else if (key == '3') {
                     igl::writeOBJ(save_path, V_holder, F_holder);
