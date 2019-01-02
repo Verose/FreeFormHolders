@@ -17,7 +17,6 @@ set(SOURCES
         )
 set(HEADERS
         include/main.h
-        include/model_path.h
         )
 
 add_executable(FreeFormHolders ${SOURCES} ${HEADERS})

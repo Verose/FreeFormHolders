@@ -18,7 +18,6 @@
 #include <set>
 
 #include "main.h"
-#include "model_path.h"
 
 //VT = v1 v2 v3
 //FT = f1
@@ -28,12 +27,17 @@
 #define DEBUG false
 #endif
 
+#ifndef MODEL_PATH
+#define MODEL_PATH "../models"
+#endif
+
 
 int main(int argc, char *argv[]) {
 //    bool init = false;
-    Eigen::MatrixXd V;
-    Eigen::MatrixXi F;
+    Eigen::MatrixXd V, V_in, V_out, V_holder;
+    Eigen::MatrixXi F, F_in, F_out, F_holder;
     Eigen::VectorXd d;
+    std::string save_path = MODEL_PATH "/holder.obj";;
 
     // Load a mesh
     igl::readOBJ(MODEL_PATH "/Cow.obj", V, F);
@@ -53,7 +57,6 @@ int main(int argc, char *argv[]) {
     {
         // Draw parent menu content
         menu.draw_viewer_menu();
-//        menu.shutdown();
     };
 
     // Draw additional windows
@@ -61,14 +64,20 @@ int main(int argc, char *argv[]) {
     {
         // Define next window position + size
         ImGui::SetNextWindowPos(ImVec2(180.f * menu.menu_scaling(), 10), ImGuiSetCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(200, 100), ImGuiSetCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(220, 160), ImGuiSetCond_FirstUseEver);
         ImGui::Begin("Holder Parameters", nullptr, ImGuiWindowFlags_NoSavedSettings);
 
         // Expose the same variable directly ...
         ImGui::PushItemWidth(-80);
-        ImGui::DragScalar("max distance %", ImGuiDataType_Double, &distance_mod, 0.1, 0, 0, "%.2f");
-        ImGui::DragScalar("holder width", ImGuiDataType_Double, &holder_width, 0.1, 0, 0, "%.2f");
+        ImGui::DragScalar("Max Distance %", ImGuiDataType_Double, &distance_mod, 0.1, nullptr, nullptr, "%.2f");
+        ImGui::DragScalar("Holder Width", ImGuiDataType_Double, &holder_width, 0.1, nullptr, nullptr, "%.2f");
         ImGui::PopItemWidth();
+
+        ImGui::InputText("Output holder location", save_path);
+
+        ImGui::Text("(1) Create");
+        ImGui::Text("(2) Clear");
+        ImGui::Text("(3) Save");
 
         ImGui::End();
     };
@@ -80,7 +89,6 @@ int main(int argc, char *argv[]) {
         VS << vid;
         // All vertices are the targets
         VT.setLinSpaced(V.rows(), 0, V.rows() - 1);
-        std::cout << "Computing geodesic distance to vertex " << vid << "..." << std::endl;
         igl::exact_geodesic(V, F, VS, FS, VT, FT, d);
         // const double strip_size = 0.05;
         // The function should be 1 on each integer coordinate
@@ -122,22 +130,31 @@ int main(int argc, char *argv[]) {
             [&](igl::opengl::glfw::Viewer& viewer, unsigned char key, int) -> bool {
                 if (key == '1') {
                     viewer.data().clear();
-                    move_gripper_in_normal_direction(holder_width);
-                    invert_gripper_normal_direction();
-                    combine_meshes();
 
-                    Eigen::MatrixXd V_holder;
-                    Eigen::MatrixXi F_holder;
-                    igl::readOBJ(MODEL_PATH "/holder.obj", V_holder, F_holder);
+                    Eigen::MatrixXi F_grip_out;
+                    Eigen::MatrixXd V_grip;
+                    igl::readOBJ(MODEL_PATH "/grip_mesh.obj", V_grip, F_grip_out);
+                    Eigen::MatrixXd V_grip_out(V_grip.rows(), 3);
+                    move_gripper_in_normal_direction(holder_width, V_grip, F_grip_out, V_grip_out);
 
+                    Eigen::MatrixXi F_grip_in(F_grip_out.rows(), 3);
+                    invert_gripper_normal_direction(V_grip, F_grip_out, F_grip_in);
+                    combine_meshes(V_grip, F_grip_in, V_grip_out, F_grip_out, V_holder, F_holder);
                     viewer.data().set_mesh(V_holder, F_holder);
 
                     std::cout << "Your new cut is ready!" << std::endl;
-                    std::cout << "To reset press key '2'" << std::endl;
+                    std::cout << "To reset press '2', to save press '3'" << std::endl;
                 }
                 else if (key == '2') {
                     viewer.data().clear();
                     viewer.data().set_mesh(V, F);
+                    std::cout << "Resetting to original mesh" << std::endl;
+                    std::cout << "To choose new source for holder press '1', to save press '3'" << std::endl;
+                }
+                else if (key == '3') {
+                    igl::writeOBJ(save_path, V_holder, F_holder);
+                    std::cout << "Saved holder.obj" << std::endl;
+                    std::cout << "To choose new source for holder press '1', to reset press '2'" << std::endl;
                 }
                 return false;
             };
@@ -152,8 +169,8 @@ int main(int argc, char *argv[]) {
 void display_cut(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd d,
         igl::opengl::glfw::Viewer &viewer, const std::vector<Eigen::Vector2i> &cuts) {
     for (const auto &cut : cuts) {
-        double point_index_start = cut[0];
-        double point_index_end = cut[1];
+        long point_index_start = cut[0];
+        long point_index_end = cut[1];
         Eigen::RowVector3d point_start(V(point_index_start, 0), V(point_index_start, 1), V(point_index_start, 2));
         Eigen::RowVector3d point_end(V(point_index_end, 0), V(point_index_end, 1), V(point_index_end, 2));
         viewer.data().add_points(point_start, Eigen::RowVector3d(1, 0, 0));  // show the first point of each edge
@@ -211,69 +228,48 @@ void save_grip_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Ei
     grip_mesh.close();
 }
 
-void move_gripper_in_normal_direction(double holder_width) {
-    Eigen::MatrixXd V_grip;
-    Eigen::MatrixXi F_grip;
-    igl::readOBJ(MODEL_PATH "/grip_mesh.obj", V_grip, F_grip);
-
+void move_gripper_in_normal_direction(double holder_width, Eigen::MatrixXd &V_mesh, Eigen::MatrixXi &F_grip_out,
+        Eigen::MatrixXd &V_grip_out) {
     Eigen::MatrixXd N;
 
     // Load a mesh
     igl::per_vertex_normals(
-            V_grip,
-            F_grip,
+            V_mesh,
+            F_grip_out,
             igl::PerVertexNormalsWeightingType::PER_VERTEX_NORMALS_WEIGHTING_TYPE_AREA,
             N);
-    Eigen::MatrixXd result(V_grip.rows(), 3);
 
-    for (int i = 0; i < V_grip.rows(); i++) {
-        Eigen::RowVector3d point(V_grip(i, 0), V_grip(i, 1), V_grip(i, 2));
+    for (int i = 0; i < V_mesh.rows(); i++) {
+        Eigen::RowVector3d point(V_mesh(i, 0), V_mesh(i, 1), V_mesh(i, 2));
         Eigen::RowVector3d normal(N(i, 0), N(i, 1), N(i, 2));
         Eigen::RowVector3d sub = normal - point;
         sub.normalize();
         Eigen::RowVector3d res = point + holder_width*sub;
-        result(i, 0) = res(0);
-        result(i, 1) = res(1);
-        result(i, 2) = res(2);
+        V_grip_out(i, 0) = res(0);
+        V_grip_out(i, 1) = res(1);
+        V_grip_out(i, 2) = res(2);
     }
-
-    igl::writeOBJ(MODEL_PATH "/grip_mesh_out.obj", result, F_grip);
 }
 
-void invert_gripper_normal_direction() {
-    Eigen::MatrixXd V_grip;
-    Eigen::MatrixXi F_grip;
-    igl::readOBJ(MODEL_PATH "/grip_mesh.obj", V_grip, F_grip);
-    Eigen::MatrixXi F_grip_inv(F_grip.rows(), 3);
-
-    Eigen::MatrixXi N;
-
+void invert_gripper_normal_direction(Eigen::MatrixXd &V_grip, Eigen::MatrixXi &F_grip, Eigen::MatrixXi &F_grip_inv) {
     for (int i = 0; i < F_grip.rows(); i++) {
         F_grip_inv(i, 0) = F_grip(i, 2);
         F_grip_inv(i, 2) = F_grip(i, 0);
         F_grip_inv(i, 1) = F_grip(i, 1);
     }
-
-    igl::writeOBJ(MODEL_PATH "/grip_mesh_in.obj", V_grip, F_grip_inv);
 }
 
-void combine_meshes() {
-    Eigen::MatrixXd V_grip_in, V_grip_out, V;
-    Eigen::MatrixXi F_grip_in, F_grip_out, F;
-    igl::readOBJ(MODEL_PATH "/grip_mesh_in.obj", V_grip_in, F_grip_in);
-    igl::readOBJ(MODEL_PATH "/grip_mesh_out.obj", V_grip_out, F_grip_out);
+void combine_meshes(Eigen::MatrixXd &V_grip_in, Eigen::MatrixXi &F_grip_in,
+        Eigen::MatrixXd &V_grip_out, Eigen::MatrixXi &F_grip_out,
+        Eigen::MatrixXd &V_holder, Eigen::MatrixXi &F_holder) {
     std::vector<Eigen::MatrixXd> V_list{V_grip_in, V_grip_out};
     std::vector<Eigen::MatrixXi> F_list{F_grip_in, F_grip_out};
 
-    igl::combine(V_list, F_list, V, F);
-
-    igl::writeOBJ(MODEL_PATH "/holder.obj", V, F);
+    igl::combine(V_list, F_list, V_holder, F_holder);
 }
 
 void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d, const double t,
                std::vector<Eigen::Vector2i> &cuts) {
-    std::cout << "Calc Grip" << std::endl;
-
     // #F by #3 adjacent matrix, the element i,j is the id of the triangle
     // adjacent to the j edge of triangle i
     Eigen::MatrixXi FF;
@@ -286,7 +282,7 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
     Eigen::SparseMatrix<double> Adj;
     igl::adjacency_matrix(F, Adj);
 
-    int num_faces = F.rows();
+    long num_faces = F.rows();
     Eigen::MatrixXi cut_mask(num_faces, 3);
 
     std::set<int> visited_faces_ids;

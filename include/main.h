@@ -28,13 +28,16 @@ int get_closer_v_id_from_source(const Eigen::Vector2i e, const Eigen::VectorXd &
 
 void save_grip_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d, const double t);
 
-void move_gripper_in_normal_direction(double holder_width);
+void move_gripper_in_normal_direction(double holder_width, Eigen::MatrixXd &V_mesh,
+        Eigen::MatrixXi &F_grip_out, Eigen::MatrixXd &V_grip_out);
 
 void display_cut(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, Eigen::VectorXd d,
 igl::opengl::glfw::Viewer &viewer, const std::vector<Eigen::Vector2i> &cuts);
 
-void invert_gripper_normal_direction();
+void invert_gripper_normal_direction(Eigen::MatrixXd &V_grip, Eigen::MatrixXi &F_grip, Eigen::MatrixXi &F_grip_inv);
 
-void combine_meshes();
+void combine_meshes(Eigen::MatrixXd &V_grip_in, Eigen::MatrixXi &F_grip_in,
+        Eigen::MatrixXd &V_grip_out, Eigen::MatrixXi &F_grip_out,
+        Eigen::MatrixXd &V_holder, Eigen::MatrixXi &F_holder);
 
 #endif //FREEFROMHOLDERS_MAIN_H
