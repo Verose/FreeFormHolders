@@ -37,10 +37,11 @@ int main(int argc, char *argv[]) {
     Eigen::MatrixXd V, V_in, V_out, V_holder;
     Eigen::MatrixXi F, F_in, F_out, F_holder;
     Eigen::VectorXd d;
-    std::string save_path = MODEL_PATH "/holder.obj";;
+    std::string save_path = MODEL_PATH "/holder.obj";
+    std::string load_path = MODEL_PATH "/Cow.obj";
 
     // Load a mesh
-    igl::readOBJ(MODEL_PATH "/Cow.obj", V, F);
+    igl::readOBJ(load_path, V, F);
 
     igl::opengl::glfw::Viewer viewer;
 
@@ -65,19 +66,21 @@ int main(int argc, char *argv[]) {
     {
         // Define next window position + size
         ImGui::SetNextWindowPos(ImVec2(180.f * menu.menu_scaling(), 10), ImGuiSetCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(250, 160), ImGuiSetCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(250, 195), ImGuiSetCond_FirstUseEver);
         ImGui::Begin("Holder Parameters", nullptr, ImGuiWindowFlags_NoSavedSettings);
 
         // Expose the variables directly
         ImGui::PushItemWidth(-100);
         ImGui::InputDouble("Max Distance %", &distance_mod, 0.05, 0.1, "%.2f");
         ImGui::InputDouble("Holder Width", &holder_width, 0.005, 0.01, "%.3f");
+        ImGui::InputText("Load Holder Path", load_path);
         ImGui::InputText("Save Holder Path", save_path);
         ImGui::PopItemWidth();
 
-        ImGui::Text("(1) Create");
+        ImGui::Text("(1) Cut");
         ImGui::Text("(2) Clear");
-        ImGui::Text("(3) Save");
+        ImGui::Text("(3) Load");
+        ImGui::Text("(4) Save");
 
         ImGui::End();
     };
@@ -149,20 +152,28 @@ int main(int argc, char *argv[]) {
                     viewer.data().set_mesh(V_holder, F_holder);
 
                     std::cout << "Your new cut is ready!" << std::endl;
-                    std::cout << "To reset press '2', to save press '3'" << std::endl;
+                    std::cout << "To reset press '2', to load new model press '3', to save press '4'" << std::endl;
                     cut_selected = true;
                 }
                 else if (key == '2') {
                     viewer.data().clear();
                     viewer.data().set_mesh(V, F);
                     std::cout << "Resetting to original mesh" << std::endl;
-                    std::cout << "To choose new source for holder press '1', to save press '3'" << std::endl;
+                    std::cout << "To choose new source for holder press '1', to load new model press '3', to save press '4'" << std::endl;
                     cut_selected = false;
                 }
                 else if (key == '3') {
+                    igl::readOBJ(load_path, V, F);
+                    viewer.data().clear();
+                    viewer.data().set_mesh(V, F);
+                    std::cout << "Loaded " << load_path.c_str() << std::endl;
+                    std::cout << "To choose new source for holder press '1', to reset press '2', to save press '4'" << std::endl;
+                    cut_selected = false;
+                }
+                else if (key == '4') {
                     igl::writeOBJ(save_path, V_holder, F_holder);
-                    std::cout << "Saved holder.obj" << std::endl;
-                    std::cout << "To choose new source for holder press '1', to reset press '2'" << std::endl;
+                    std::cout << "Saved " << save_path.c_str() << std::endl;
+                    std::cout << "To choose new source for holder press '1', to reset press '2', to load new model press '3'" << std::endl;
                 }
                 return false;
             };
