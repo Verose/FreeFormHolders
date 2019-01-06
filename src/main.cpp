@@ -297,12 +297,7 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
     Eigen::MatrixXi FFi;
     igl::triangle_triangle_adjacency(F, FF, FFi);
 
-    // max(F) by max(F) cotangent matrix, each row i corresponding to V(i,:)
-    Eigen::SparseMatrix<double> Adj;
-    igl::adjacency_matrix(F, Adj);
-
     long num_faces = F.rows();
-    Eigen::MatrixXi cut_mask(num_faces, 3);
 
     std::set<int> visited_faces_ids;
     int current_face_id = 0;
@@ -325,51 +320,30 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
             // Not interesting
             found_cut = false;
         }
-        if (vd[0] < t &&
-            vd[1] < t &&
-            vd[2] > t) {
+        if (vd[0] < t && vd[1] < t && vd[2] > t) {
             // We want to add e(v0,v1) = e0
             // e1,e2
             e1_id = 1;
             e2_id = 2;
-            cut_mask(i, 0) = 1;
             cuts.push_back(e0);
-        } else if (vd[0] > t &&
-                   vd[1] < t &&
-                   vd[2] < t) {
+        } else if (vd[0] > t && vd[1] < t && vd[2] < t) {
             // We want e(v1,v2) = e1
             // e2,e0
             e1_id = 2;
             e2_id = 0;
             cuts.push_back(e1);
-            cut_mask(i, 1) = 1;
-        } else if (vd[0] < t &&
-                   vd[1] > t &&
-                   vd[2] < t) {
+        } else if (vd[0] < t && vd[1] > t && vd[2] < t) {
             // We want e(v0,v2) = e2
             // e0,e1
             e1_id = 0;
             e2_id = 1;
             cuts.push_back(e2);
-            cut_mask(i, 2) = 1;
         } else {
             // only vertex
             found_cut = false;
         }
         if (found_cut) {
             visited_faces_ids.insert(i);
-
-#if DEBUG
-            std::cout << "=================================" << std::endl;
-            std::cout << "face id: " << current_face_id << std::endl;
-            std::cout << "v0 id: " << fv[0] << " v0 dist: " << d[fv[0]] << std::endl;
-            std::cout << "v1 id: " << fv[1] << " v1 dist: " << d[fv[1]] << std::endl;
-            std::cout << "v2 id: " << fv[2] << " v2 dist: " << d[fv[2]] << std::endl;
-            std::cout << "e0: (" << fv[0] << "," << fv[1] << ")" << std::endl;
-            std::cout << "e1: (" << fv[1] << "," << fv[2] << ")" << std::endl;
-            std::cout << "e2: (" << fv[2] << "," << fv[0] << ")" << std::endl;
-            std::cout << "=================================" << std::endl;
-#endif
             break;
         }
     }
@@ -388,7 +362,7 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         current_face_id = next_face_id;
         if (visited_faces_ids.find(current_face_id) != visited_faces_ids.end()) {
             // Sanity check
-            std::cout << "Been in this face already - is this a bug?" << std::endl;
+            std::cout << "Sanity check - Been in this face already." << std::endl;
         }
         visited_faces_ids.insert(current_face_id);
 
@@ -413,18 +387,17 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
         std::array<Eigen::Vector2i, 3> E{e0, e1, e2};
 
         int closer_v = 0;
-        int closer_v_source = get_closer_v_id_from_source(E[source_edge_id], d);
+        int closer_v_source = get_edge_closer_v_id(E[source_edge_id], d);
         int other_edge_id = 0;
         int candidate_cut_edge_id = 0;
-        bool found_other_edge = false;
 
         for (int i = 0; i < E.size(); i++) {
             if (source_edge_id == i) {
                 continue;
             }
-            if (is_other_edge(E[i][0], E[i][1], t, d, closer_v)) {
+            if (is_other_edge(E[i][0], E[i][1], t, d)) {
+                closer_v = get_edge_closer_v_id(E[i], d);
                 other_edge_id = i;
-                found_other_edge = true;
                 // Get third edge as candidate for cut (will be added if 2 vertices are in wanted dist)
                 for (int cand = 0; cand < E.size(); cand++) {
                     if (cand != source_edge_id && cand != other_edge_id) {
@@ -434,16 +407,9 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
                 break;
             }
         }
-#if DEBUG
-        std::cout << "Found other edge: " << found_other_edge << std::endl;
-#endif
-        // If add vertex - just go to next face
-        // else add edge
-        e1_id = source_edge_id;
-        e2_id = other_edge_id;
+
         if (closer_v != closer_v_source) {
-            // Add third edge (not source, and not other) -  (closer_v , closer_v_source) to cuts
-            cut_mask(current_face_id, candidate_cut_edge_id) = 1;
+            // Add third edge (not source, and not other) -  i.e. (closer_v , closer_v_source) to cuts
             switch (candidate_cut_edge_id) {
                 case (0):
                     cuts.push_back(e0);
@@ -456,7 +422,7 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
                     break;
             }
         } else {
-            // "Add vertex" =  just go to next face
+            // "Add vertex",  just go to next face
         }
 
         // Go to next face
@@ -475,37 +441,15 @@ void calc_grip(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::
 #endif
 }
 
-bool is_other_edge(const int v1, const int v2, const double t, const Eigen::VectorXd &d, int &closer_v) {
-#if DEBUG
-    std::cout << "v1 dist: " << d[v1] << " v2 dist: " << d[v2];
-#endif
-    if (d[v1] > t && d[v2] < t) {
-        closer_v = v2;
-#if DEBUG
-        std::cout << " Found other edge" << std::endl;
-#endif
-        return true;
-    } else if (d[v2] > t && d[v1] < t) {
-        closer_v = v1;
-#if DEBUG
-        std::cout << " Found other edge" << std::endl;
-#endif
+bool is_other_edge(const int v1, const int v2, const double t, const Eigen::VectorXd &d) {
+    if ((d[v1] > t && d[v2] < t) || (d[v2] > t && d[v1] < t)) {
         return true;
     } else {
-#if DEBUG
-        std::cout << " Not other edge" << std::endl;
-#endif
         return false;
     }
 }
 
-int get_closer_v_id_from_source(const Eigen::Vector2i e, const Eigen::VectorXd &d) {
-    double v1 = e[0];
-    double v2 = e[1];
-
-    double dist1 = d[e[0]];
-    double dist2 = d[e[1]];
-
+int get_edge_closer_v_id(const Eigen::Vector2i e, const Eigen::VectorXd &d) {
     if (d[e[0]] < d[e[1]]) {
         return e[0];
     } else {
