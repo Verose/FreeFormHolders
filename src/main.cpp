@@ -31,6 +31,10 @@
 #define MODEL_PATH "../models"
 #endif
 
+#ifndef DIST_MULTIPLAYER
+#define DIST_MULTIPLAYER 1000
+#endif
+
 
 int main(int argc, char *argv[]) {
 //    bool init = false;
@@ -93,9 +97,7 @@ int main(int argc, char *argv[]) {
         // All vertices are the targets
         VT.setLinSpaced(V.rows(), 0, V.rows() - 1);
         igl::exact_geodesic(V, F, VS, FS, VT, FT, d);
-        // const double strip_size = 0.05;
-        // The function should be 1 on each integer coordinate
-        d = (d * 1000).array().eval();
+        d = (d * DIST_MULTIPLAYER).array().eval();
 
         // Generating the mesh without using the calculated cut.
         double max_distance = d.maxCoeff();
@@ -454,5 +456,186 @@ int get_edge_closer_v_id(const Eigen::Vector2i e, const Eigen::VectorXd &d) {
         return e[0];
     } else {
         return e[1];
+    }
+}
+
+int get_edge_further_v_id(const Eigen::Vector2i e, const Eigen::VectorXd &d) {
+    return (get_edge_closer_v_id(e,d) == e[0] ? e[1] : e[0]);
+}
+
+
+void find_new_p_on_edge(const int closer_v_id, const double step_size, const int further_v_id, const Eigen::MatrixXd &V,
+                        Eigen::RowVector3d &new_point) {
+    Eigen::RowVector3d closer(V(closer_v_id, 0), V(closer_v_id, 1), V(closer_v_id, 2));
+    Eigen::RowVector3d further(V(further_v_id, 0), V(further_v_id, 1), V(further_v_id, 2));
+    Eigen::RowVector3d direction = further - closer;
+    direction.normalize();
+    Eigen::RowVector3d res = closer + 0.00001 * direction;
+    new_point(0) = res(0);
+    new_point(1) = res(1);
+    new_point(2) = res(2);
+}
+
+void calc_smooth_gripper(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F, const Eigen::VectorXd &d, const double t,
+                         Eigen::MatrixXd &V_for_smooth, Eigen::MatrixXi &F_for_smooth) {
+    std::unordered_map<int, Eigen::Vector3d> old_v_id_to_new_v;
+    std::set<int> altered_vertices_ids;
+    // #F by #3 adjacent matrix, the element i,j is the id of the triangle
+    // adjacent to the j edge of triangle i
+    Eigen::MatrixXi FF;
+    // #F by #3 adjacent matrix, the element i,j is the id of edge of the
+    // triangle FF(i,j) that is adjacent with triangle i
+    Eigen::MatrixXi FFi;
+    igl::triangle_triangle_adjacency(F, FF, FFi);
+
+
+    // Find first face:
+    int num_faces = F.rows();
+    int current_face_id = 0;
+    int e1_id = 0;
+    int e2_id = 0;
+    std::set<int> visited_faces_ids;
+    for (int i = 0; i < num_faces; i++) {
+        current_face_id = i;
+        Eigen::Vector3i fv{F(i, 0), F(i, 1), F(i, 2)};
+        Eigen::Vector3d vd{d[fv[0]], d[fv[1]], d[fv[2]]};
+        Eigen::Vector2i e0{F(i, 0), F(i, 1)};
+        Eigen::Vector2i e1{F(i, 1), F(i, 2)};
+        Eigen::Vector2i e2{F(i, 2), F(i, 0)};
+
+        bool found_cut = true;
+        // We are interested in faces where 2 vertices' distances are closer than t and one is bigger to start with.
+        if (vd[0] < t && vd[1] < t && vd[2] > t) {
+            // We want to transform v2 to be within t
+            e1_id = 1;
+            e2_id = 2;
+        } else if (vd[0] > t && vd[1] < t && vd[2] < t) {
+            // We want to transform v0 to be within t
+            e1_id = 2;
+            e2_id = 0;
+        } else if (vd[0] < t && vd[1] > t && vd[2] < t) {
+            // We want to transform v1 to be within t
+            e1_id = 0;
+            e2_id = 1;
+        } else {
+            found_cut = false;
+        }
+        if (found_cut) {
+            break;
+        }
+    }
+
+    int first_face = current_face_id;
+    visited_faces_ids.insert(current_face_id);
+    int next_face_id = FF(current_face_id, e1_id); // Go to the neighbor face using an interesting edge.
+    int source_edge_id = FFi(current_face_id, e1_id); // Remember which edge is the one we used for moving.
+
+#if DEBUG
+    std::cout << "Moving from face [" << current_face_id << "], edge [" << other_edge_id << "] to face ["
+                  << next_face_id << "] edge [" << source_edge_id << "]" << std::endl;
+#endif
+
+    while (next_face_id != first_face) {
+        current_face_id = next_face_id;
+        if (visited_faces_ids.find(current_face_id) != visited_faces_ids.end()) {
+            // Sanity check.
+            std::cout << "Been in this face already." << std::endl;
+        }
+        visited_faces_ids.insert(current_face_id);
+
+        // find the other edge s.t. d(v1)<t, d(v2)>t
+        Eigen::Vector3i fv{F(current_face_id, 0), F(current_face_id, 1), F(current_face_id, 2)};
+        Eigen::Vector3d vd{d[fv[0]], d[fv[1]], d[fv[2]]};
+        Eigen::Vector2i e0{F(current_face_id, 0), F(current_face_id, 1)};
+        Eigen::Vector2i e1{F(current_face_id, 1), F(current_face_id, 2)};
+        Eigen::Vector2i e2{F(current_face_id, 2), F(current_face_id, 0)};
+        std::array<Eigen::Vector2i, 3> E{e0, e1, e2};
+
+        // Find the other edge s.t. one vertex is within t and one is out of t.
+        // O - Vertex distance is smaller than t
+        // X - Vertex distance is bigger than t
+
+        //     O            X
+        //    / \          / \
+        //   /   \        /   \
+        //  /     \      /     \
+        // X-------X    O-------O
+        //     1            2
+
+        // ID of the vertex that was within t on the source edge.
+        int closer_v_id_source = get_edge_closer_v_id(E[source_edge_id], d);
+        int further_v_id_source = get_edge_further_v_id(E[source_edge_id], d);
+
+        // Will hold the ID of the vertex that is within t on the other edge.
+        // For face 1 in the example, it will be the same as closer_v_source, for face 2 it will be a different vertex.
+        int other_edge_id = 0;
+        for (int i = 0; i < E.size(); i++) {
+            if (source_edge_id == i) {
+                // This is the edge we started from, we already have the coordinate on it.
+                continue;
+            }
+            if (is_other_edge(E[i][0], E[i][1], t, d)) {
+                // This is the other edge that has one vertex in and one out.
+                other_edge_id = i;
+                break;
+            }
+        }
+        int closer_v_id_other_edge = get_edge_closer_v_id(E[other_edge_id], d);
+        int further_v_id_other_edge = get_edge_further_v_id(E[other_edge_id], d);
+
+        if (closer_v_id_other_edge == closer_v_id_source) {
+            //
+            //     O              O
+            //    / \     ->     / \
+            //   /   \          /   \
+            //  /     \        O-----O
+            // X-------X
+            //
+            double step_size = (t - d[closer_v_id_source]) / DIST_MULTIPLAYER;
+
+            Eigen::RowVector3d p1;
+            find_new_p_on_edge(closer_v_id_source, step_size, further_v_id_source, V, p1);
+            old_v_id_to_new_v[further_v_id_source] = p1;
+            altered_vertices_ids.insert(further_v_id_source);
+
+            Eigen::RowVector3d p2;
+            find_new_p_on_edge(closer_v_id_other_edge, step_size, further_v_id_other_edge, V, p2);
+            old_v_id_to_new_v[further_v_id_other_edge] = p2;
+            altered_vertices_ids.insert(further_v_id_other_edge);
+
+
+        } else {
+            //
+            //     X
+            //    / \     ->      O
+            //   /   \           / \
+            //  /     \         /   \
+            // O-------O       O-----O
+            //
+            // Will be taken care of using the first case.
+        }
+
+        // Go to next face
+        next_face_id = FF(current_face_id, other_edge_id);
+        source_edge_id = FFi(current_face_id, other_edge_id);
+        std::cout << "Moving from face [" << current_face_id << "], edge [" << other_edge_id << "] to face ["
+                  << next_face_id << "] edge [" << source_edge_id << "]" << std::endl;
+    }
+    std::cout << std::endl;
+    gen_smooth_gripper_mesh(V, F,old_v_id_to_new_v, altered_vertices_ids, V_for_smooth, F_for_smooth);
+}
+
+void gen_smooth_gripper_mesh(const Eigen::MatrixXd &V, const Eigen::MatrixXi &F,
+                                std::unordered_map<int, Eigen::Vector3d> &old_v_id_to_new_v,
+                                const std::set<int> &altered_vertices_ids, Eigen::MatrixXd &V_for_smooth,
+                                Eigen::MatrixXi &F_for_smooth) {
+    V_for_smooth = V;
+    F_for_smooth = F;
+    for (int i = 0; i < V_for_smooth.rows(); i++) {
+        if (altered_vertices_ids.find(i) != altered_vertices_ids.end()) {
+            V_for_smooth(i, 0) = old_v_id_to_new_v[i](0);
+            V_for_smooth(i, 2) = old_v_id_to_new_v[i](1);
+            V_for_smooth(i, 1) = old_v_id_to_new_v[i](2);
+        }
     }
 }
