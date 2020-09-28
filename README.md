@@ -3,6 +3,8 @@ This project loads a 3D OBJ model and creates the geometry of a holder, done as 
 
 Our implementation follows the lines of [AutoConnect](https://koyama.xyz/project/AutoConnect/autoconnect.pdf)'s free form holders expansion algorithm.
 
+Checkout [this link](https://docs.google.com/presentation/d/1iXRJTI04CF0LziQAyYKzkco6TlmEUyykz0laJ6W-DAI/edit?usp=sharing) for a short presentation of this project.
+
 ## Dependencies  
 * [libigl](https://libigl.github.io/) for geometry processing
 
